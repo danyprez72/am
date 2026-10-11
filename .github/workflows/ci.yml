@@ -1,0 +1,72 @@
+# =============================================================================
+# CI (Integración Continua) de AM
+# Verifica cada cambio antes de que entre a main: instala dependencias,
+# audita vulnerabilidades, corre el lint, revisa los tipos y compila la app.
+# Todavía NO despliega nada.
+# =============================================================================
+name: CI
+
+# --- Cuándo se ejecuta -------------------------------------------------------
+on:
+  pull_request:          # en cada PR que apunte a main
+    branches: [main]
+  push:                  # y cuando algo se mergea a main
+    branches: [main]
+  workflow_dispatch:     # botón "Run workflow" para correrlo a mano
+
+# --- Permisos del token automático (mínimo privilegio) -----------------------
+# Solo lectura del código. Si un paso futuro necesita más, se pide ahí.
+permissions:
+  contents: read
+
+# --- Concurrencia ------------------------------------------------------------
+# Si subís un commit nuevo al mismo PR, cancela la corrida anterior
+# para no gastar minutos en una versión que ya quedó vieja.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Lint, tipos y build
+    runs-on: ubuntu-latest   # máquina virtual Linux gratuita de GitHub
+    timeout-minutes: 10      # corta la corrida si algo se cuelga
+
+    steps:
+      # 1) Descarga el código del repo en la máquina virtual.
+      #    Las actions se fijan por SHA (no por tag) para que nadie pueda
+      #    cambiar su contenido sin que nos enteremos. El comentario indica
+      #    la versión; Dependabot las mantiene actualizadas.
+      - name: Descargar el código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # no deja el token guardado en el disco
+
+      # 2) Instala Node.js en la versión indicada en .nvmrc
+      #    y guarda en caché las dependencias para acelerar las próximas corridas.
+      - name: Instalar Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # 3) Instala las dependencias exactamente como están en package-lock.json.
+      #    "npm ci" falla si el lockfile no coincide con package.json.
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      # 4) Falla si alguna dependencia tiene una vulnerabilidad alta o crítica.
+      - name: Auditar dependencias
+        run: npm audit --audit-level=high
+
+      # 5) Lint: revisa el estilo y errores comunes del código.
+      - name: Lint
+        run: npm run lint
+
+      # 6) Verifica los tipos de TypeScript.
+      - name: Revisión de tipos
+        run: npm run typecheck
+
+      # 7) Compila la app. El resultado queda en la carpeta dist/.
+      - name: Build
+        run: npm run build

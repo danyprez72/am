@@ -1,0 +1,22 @@
+# Dependabot: abre PRs automáticos para mantener al día las dependencias.
+# Cada PR pasa por el CI como cualquier otro cambio; vos decidís si se mergea.
+version: 2
+updates:
+  # Actions usadas en los workflows (actualiza los SHA fijados).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]   # agrupa todo en un solo PR por semana
+
+  # Dependencias de npm (package.json / package-lock.json).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-menores:
+        update-types: [minor, patch]   # menores y parches juntos; las mayores van solas
